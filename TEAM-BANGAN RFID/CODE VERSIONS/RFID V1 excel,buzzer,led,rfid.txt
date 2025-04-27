@@ -1,0 +1,113 @@
+#include <SPI.h>
+#include <MFRC522.h>
+
+#define SS_PIN 10 // RX slave select
+#define RST_PIN 9
+
+MFRC522 mfrc522(SS_PIN, RST_PIN); // Create MFRC522 instance.
+
+byte card_ID[4]; // Card UID size 4 bytes
+byte Name1[4] = {0x46, 0x70, 0xDE, 0x00}; // First UID card
+byte Name2[4] = {0xF9, 0x09, 0x04, 0x0}; // Second UID card
+
+int NumbCard[2] = {0, 0}; // To track detected cards
+int j = -1;
+
+int const RedLed = 6;
+int const GreenLed = 5;
+int const Buzzer = 8;
+
+String Name;
+String UID;
+String GradeSection;
+String ContactNumber;
+String TimeIn[2] = {"", ""};
+String TimeOut[2] = {"", ""};
+
+void setup() {
+    Serial.begin(9600); // Initialize serial communications
+    SPI.begin();  // Init SPI bus
+    mfrc522.PCD_Init(); // Init MFRC522 card
+
+    Serial.println("CLEARSHEET");
+    Serial.println("LABEL,Date,Time,Name,UID,Grade & Section,Contact Number,Time In,Time Out");
+
+    pinMode(RedLed, OUTPUT);
+    pinMode(GreenLed, OUTPUT);
+    pinMode(Buzzer, OUTPUT);
+}
+
+void loop() {
+    if (!mfrc522.PICC_IsNewCardPresent()) {
+        return;
+    }
+    if (!mfrc522.PICC_ReadCardSerial()) {
+        return;
+    }
+
+    UID = "";
+    for (byte i = 0; i < mfrc522.uid.size; i++) {
+        card_ID[i] = mfrc522.uid.uidByte[i];
+        UID += String(card_ID[i], HEX);
+    }
+
+    if (memcmp(card_ID, Name1, 4) == 0) {
+        Name = "Ean Gingoyon";
+        UID = "12345678";
+        GradeSection = "Grade 10 - Happiness";
+        ContactNumber = "9876543210";
+        j = 0;
+    } else if (memcmp(card_ID, Name2, 4) == 0) {
+        Name = "Jane Smith";
+        UID = "87654321";
+        GradeSection = "Grade 12 - B";
+        ContactNumber = "9123456789";
+        j = 1;
+    } else {
+        digitalWrite(GreenLed, LOW);
+        digitalWrite(RedLed, HIGH);
+        for (int i = 0; i < 3; i++) { // Different sound pattern for unregistered cards
+            digitalWrite(Buzzer, HIGH);
+            delay(200);
+            digitalWrite(Buzzer, LOW);
+            delay(200);
+        }
+        delay(500);
+        digitalWrite(RedLed, LOW);
+        return;
+    }
+
+    String currentTime = "TIME"; // Replace with actual time function
+
+    if (NumbCard[j] == 0) {
+        TimeIn[j] = currentTime;
+        TimeOut[j] = "";
+        NumbCard[j] = 1;
+        
+        Serial.print("DATA,DATE," + currentTime + "," + Name + "," + UID + "," + GradeSection + "," + ContactNumber + "," + TimeIn[j] + ",");
+        Serial.println();
+        Serial.println("SAVEWORKBOOKAS,Attendance/AttendanceList");
+    } 
+    else if (NumbCard[j] == 1) {
+        TimeOut[j] = currentTime;
+        
+        Serial.print("DATA,DATE," + currentTime + "," + Name + "," + UID + "," + GradeSection + "," + ContactNumber + ",," + TimeOut[j]);
+        Serial.println();
+        
+        NumbCard[j] = 0;
+    }
+
+    // Success indicator (Green LED & Buzzer)
+    digitalWrite(GreenLed, HIGH);
+    digitalWrite(RedLed, LOW);
+    for (int i = 0; i < 2; i++) { // Different sound pattern for registered cards
+        digitalWrite(Buzzer, HIGH);
+        delay(100);
+        digitalWrite(Buzzer, LOW);
+        delay(100);
+    }
+    delay(500);
+
+    digitalWrite(GreenLed, LOW);
+    digitalWrite(RedLed, LOW);
+}
